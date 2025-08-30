@@ -249,6 +249,15 @@ function parseCSS(css) {
 
 // Function to create Figma elements based on parsed HTML
 async function createElements(parent, elements) {
+  // Pre-load fonts to avoid issues with text decoration and other text properties
+  try {
+    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+    console.log('Successfully pre-loaded fonts');
+  } catch (e) {
+    console.error('Error pre-loading fonts:', e);
+  }
+  
   for (const element of elements) {
     let figmaElement;
     
@@ -257,14 +266,13 @@ async function createElements(parent, elements) {
       case 'heading':
       case 'paragraph':
         figmaElement = figma.createText();
-        await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+        // Font should already be loaded from the preload step
         figmaElement.characters = element.content;
         
         // Apply heading-specific styles
         if (element.type === 'heading') {
           const fontSize = 24 - (element.level - 1) * 2; // h1: 24px, h2: 22px, etc.
           figmaElement.fontSize = fontSize;
-          await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
           figmaElement.fontName = { family: 'Inter', style: 'Bold' };
         }
         break;
@@ -277,7 +285,7 @@ async function createElements(parent, elements) {
         // Add text if there's content
         if (element.content) {
           const text = figma.createText();
-          await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+          // Font should already be loaded from the preload step
           text.characters = element.content;
           figmaElement.appendChild(text);
           text.x = 10;
@@ -290,7 +298,7 @@ async function createElements(parent, elements) {
     }
     
     // Apply styles
-    applyStylesToFigmaElement(figmaElement, element.styles);
+    await applyStylesToFigmaElement(figmaElement, element.styles);
     
     // Add to parent
     parent.appendChild(figmaElement);
@@ -307,8 +315,17 @@ async function createElements(parent, elements) {
 }
 
 // Function to apply styles to Figma elements
-function applyStylesToFigmaElement(figmaElement, styles) {
+async function applyStylesToFigmaElement(figmaElement, styles) {
   if (!styles) return;
+  
+  // Load fonts for text elements before applying styles
+  if (figmaElement.type === 'TEXT') {
+    try {
+      await figma.loadFontAsync(figmaElement.fontName || { family: 'Inter', style: 'Regular' });
+    } catch (e) {
+      console.error('Error loading font:', e);
+    }
+  }
   
   // Apply color
   if (styles.color && figmaElement.type === 'TEXT') {
@@ -426,18 +443,43 @@ function applyStylesToFigmaElement(figmaElement, styles) {
   
   // Apply opacity
   if (styles['opacity']) {
-    const opacity = parseFloat(styles['opacity']);
-    if (!isNaN(opacity) && opacity >= 0 && opacity <= 1) {
-      figmaElement.opacity = opacity;
+    const opacityValue = parseFloat(styles['opacity']);
+    if (!isNaN(opacityValue)) {
+      // Ensure opacity is between 0 and 1
+      const normalizedOpacity = Math.max(0, Math.min(1, opacityValue));
+      // Figma expects opacity as a value between 0 and 1
+      try {
+        // Set opacity directly on the node
+        figmaElement.opacity = normalizedOpacity;
+        console.log(`Applied opacity: ${normalizedOpacity} to element`);
+      } catch (e) {
+        console.error('Error applying opacity:', e);
+      }
     }
   }
   
   // Apply text decoration
   if (styles['text-decoration'] && figmaElement.type === 'TEXT') {
-    if (styles['text-decoration'] === 'underline') {
-      figmaElement.textDecoration = 'UNDERLINE';
-    } else if (styles['text-decoration'] === 'line-through') {
-      figmaElement.textDecoration = 'STRIKETHROUGH';
+    try {
+      // Make sure we have the right decoration value
+      const decoration = styles['text-decoration'].toLowerCase().trim();
+      
+      // Set text decoration based on CSS value
+      if (decoration === 'underline') {
+        // According to Figma API docs, textDecoration requires the font to be loaded first
+        // We've already loaded the font at the beginning of this function
+        figmaElement.textDecoration = 'UNDERLINE';
+        console.log('Applied UNDERLINE decoration to text element');
+      } else if (decoration === 'line-through') {
+        figmaElement.textDecoration = 'STRIKETHROUGH';
+        console.log('Applied STRIKETHROUGH decoration to text element');
+      } else if (decoration === 'none') {
+        figmaElement.textDecoration = 'NONE';
+        console.log('Removed text decoration from text element');
+      }
+    } catch (e) {
+      console.error('Error applying text decoration:', e);
+      console.log('Note: Text decoration requires the font to be properly loaded first');
     }
   }
 }
