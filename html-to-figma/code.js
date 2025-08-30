@@ -441,45 +441,56 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
     }
   }
   
-  // Apply opacity
-  if (styles['opacity']) {
-    const opacityValue = parseFloat(styles['opacity']);
-    if (!isNaN(opacityValue)) {
-      // Ensure opacity is between 0 and 1
-      const normalizedOpacity = Math.max(0, Math.min(1, opacityValue));
-      // Figma expects opacity as a value between 0 and 1
-      try {
-        // Set opacity directly on the node
-        figmaElement.opacity = normalizedOpacity;
-        console.log(`Applied opacity: ${normalizedOpacity} to element`);
-      } catch (e) {
-        console.error('Error applying opacity:', e);
-      }
+  // FIXED: Apply opacity - moved to end and added validation
+  if (styles.opacity) {
+    const opacityValue = parseFloat(styles.opacity);
+    if (!isNaN(opacityValue) && opacityValue >= 0 && opacityValue <= 1) {
+      figmaElement.opacity = opacityValue;
+      console.log(`Applied opacity: ${opacityValue} to element`);
+    } else {
+      console.warn(`Invalid opacity value: ${styles.opacity}. Must be between 0 and 1.`);
     }
   }
   
-  // Apply text decoration
+  // FIXED: Apply text decoration - completely rewritten with proper error handling
   if (styles['text-decoration'] && figmaElement.type === 'TEXT') {
     try {
-      // Make sure we have the right decoration value
+      // Ensure font is loaded before applying text decoration
+      await figma.loadFontAsync(figmaElement.fontName);
+      
       const decoration = styles['text-decoration'].toLowerCase().trim();
       
-      // Set text decoration based on CSS value
-      if (decoration === 'underline') {
-        // According to Figma API docs, textDecoration requires the font to be loaded first
-        // We've already loaded the font at the beginning of this function
+      // Handle compound values like "underline solid red"
+      if (decoration.includes('underline')) {
         figmaElement.textDecoration = 'UNDERLINE';
-        console.log('Applied UNDERLINE decoration to text element');
-      } else if (decoration === 'line-through') {
+        console.log('Applied UNDERLINE decoration');
+      } else if (decoration.includes('line-through') || decoration.includes('strikethrough')) {
         figmaElement.textDecoration = 'STRIKETHROUGH';
-        console.log('Applied STRIKETHROUGH decoration to text element');
+        console.log('Applied STRIKETHROUGH decoration');
       } else if (decoration === 'none') {
         figmaElement.textDecoration = 'NONE';
-        console.log('Removed text decoration from text element');
+        console.log('Removed text decoration');
+      } else {
+        console.warn(`Unsupported text-decoration value: ${decoration}`);
       }
     } catch (e) {
       console.error('Error applying text decoration:', e);
-      console.log('Note: Text decoration requires the font to be properly loaded first');
+      // Try to load a fallback font and apply decoration again
+      try {
+        await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+        figmaElement.fontName = { family: 'Inter', style: 'Regular' };
+        
+        const decoration = styles['text-decoration'].toLowerCase().trim();
+        if (decoration.includes('underline')) {
+          figmaElement.textDecoration = 'UNDERLINE';
+        } else if (decoration.includes('line-through') || decoration.includes('strikethrough')) {
+          figmaElement.textDecoration = 'STRIKETHROUGH';
+        } else if (decoration === 'none') {
+          figmaElement.textDecoration = 'NONE';
+        }
+      } catch (fallbackError) {
+        console.error('Failed to apply text decoration with fallback font:', fallbackError);
+      }
     }
   }
 }
@@ -515,6 +526,16 @@ function parseColor(colorString) {
     const r = parseInt(rgbMatch[1]) / 255;
     const g = parseInt(rgbMatch[2]) / 255;
     const b = parseInt(rgbMatch[3]) / 255;
+    
+    return { r, g, b };
+  }
+  
+  // Handle rgba() colors and extract opacity
+  const rgbaMatch = colorString.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+  if (rgbaMatch) {
+    const r = parseInt(rgbaMatch[1]) / 255;
+    const g = parseInt(rgbaMatch[2]) / 255;
+    const b = parseInt(rgbaMatch[3]) / 255;
     
     return { r, g, b };
   }
