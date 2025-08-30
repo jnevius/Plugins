@@ -1,0 +1,14 @@
+{
+  "name": "HTML to Figma",
+  "id": "html-to-figma-plugin",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "menu": [
+    {
+      "name": "HTML to Figma",
+      "command": "open-plugin"
+    }
+  ]
+}
