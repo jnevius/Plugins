@@ -207,11 +207,19 @@
 <p>This is a paragraph of text.</p>
 <div class="box">This is a styled div</div>
 <p style="opacity: 0.5;">This paragraph has inline opacity</p>
-<div class="transparent-box">This div has opacity from CSS</div>`);
+<div class="transparent-box">This div has opacity from CSS</div>
+<p style="text-decoration: underline;">This text has inline underline</p>
+<p style="text-decoration: line-through;">This text has inline strikethrough</p>
+<p class="underlined">This text has CSS underline</p>
+<p class="strikethrough">This text has CSS strikethrough</p>
+<p>This text has <u>HTML underline</u> tag</p>
+<p>This text has <s>HTML strikethrough</s> tag</p>
+<p>This text has <span style="text-decoration: underline;">span with underline</span> in it</p>`);
 
     cssEditor.setValue(`h1 {
   color: #ff0000;
   font-size: 32px;
+  text-decoration: line-through;
 }
 
 p {
@@ -235,6 +243,16 @@ p {
   border-radius: 8px;
   width: 200px;
   opacity: 0.7;
+}
+
+.underlined {
+  text-decoration: underline;
+  color: #0000ff;
+}
+
+.strikethrough {
+  text-decoration: line-through;
+  color: #ff00ff;
 }`);
 
     // Get UI elements
