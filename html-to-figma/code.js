@@ -508,6 +508,17 @@ async function createElements(parent, elements) {
         figmaElement.name = 'div';
         figmaElement.resize(200, 100);
         
+        // Check if this div should be a flex container
+        if (element.styles && element.styles['display'] === 'flex') {
+          figmaElement.layoutMode = 'HORIZONTAL';
+          figmaElement.primaryAxisSizingMode = 'AUTO';
+          figmaElement.counterAxisSizingMode = 'AUTO';
+          figmaElement.primaryAxisAlignItems = 'MIN';
+          figmaElement.counterAxisAlignItems = 'MIN';
+          figmaElement.itemSpacing = 10;
+          console.log('Created div as a flex container');
+        }
+        
         // Add text if there's content
         if (element.content) {
           const text = figma.createText();
@@ -529,14 +540,37 @@ async function createElements(parent, elements) {
     // Add to parent
     parent.appendChild(figmaElement);
     
-    // Position elements with a simple layout
-    if (parent.children.length > 1) {
-      const previousElement = parent.children[parent.children.length - 2];
-      figmaElement.y = previousElement.y + previousElement.height + 20;
+    // Position elements based on their display property and parent's layout
+    if (element.styles && element.styles['display']) {
+      const displayValue = element.styles['display'].toLowerCase().trim();
+      
+      // For display:none, we've already set visibility to false
+      if (displayValue === 'none') {
+        // No need to position hidden elements
+        console.log('Skipping positioning for hidden element');
+      } else if (parent.layoutMode) {
+        // If parent has a layout mode set, let auto-layout handle positioning
+        console.log(`Element will be positioned by parent's ${parent.layoutMode} layout`);
+      } else {
+        // Default positioning for elements without specific layout handling
+        if (parent.children.length > 1) {
+          const previousElement = parent.children[parent.children.length - 2];
+          figmaElement.y = previousElement.y + previousElement.height + 20;
+        } else {
+          figmaElement.y = 20;
+        }
+        figmaElement.x = 20;
+      }
     } else {
-      figmaElement.y = 20;
+      // Default positioning for elements without display property
+      if (parent.children.length > 1) {
+        const previousElement = parent.children[parent.children.length - 2];
+        figmaElement.y = previousElement.y + previousElement.height + 20;
+      } else {
+        figmaElement.y = 20;
+      }
+      figmaElement.x = 20;
     }
-    figmaElement.x = 20;
   }
 }
 
@@ -679,6 +713,65 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
     }
   }
   
+  // Apply display property
+  if (styles['display']) {
+    const displayValue = styles['display'].toLowerCase().trim();
+    console.log(`Applying display: ${displayValue} to ${figmaElement.type} element`);
+    
+    // Handle different display values
+    switch (displayValue) {
+      case 'block':
+        // For block elements, ensure they take full width of parent
+        if (figmaElement.type === 'FRAME') {
+          // Set width to fill parent container
+          figmaElement.layoutSizingHorizontal = 'FILL';
+          // Add some margin for visual separation
+          figmaElement.layoutMode = 'VERTICAL';
+          figmaElement.itemSpacing = 10;
+          console.log('Applied block display style');
+        } else if (figmaElement.type === 'TEXT') {
+          // For text elements, we can't directly set layout sizing
+          // But we can adjust width to simulate block behavior
+          figmaElement.resize(parent.width - 40, figmaElement.height);
+          console.log('Applied block-like sizing to text element');
+        }
+        break;
+        
+      case 'inline':
+        // For inline elements, they should flow horizontally
+        if (figmaElement.type === 'FRAME') {
+          figmaElement.layoutMode = 'HORIZONTAL';
+          figmaElement.layoutSizingHorizontal = 'HUG';
+          figmaElement.layoutSizingVertical = 'HUG';
+          figmaElement.itemSpacing = 5;
+          console.log('Applied inline display style');
+        }
+        break;
+        
+      case 'flex':
+        // For flex elements, set up a flex container
+        if (figmaElement.type === 'FRAME') {
+          figmaElement.layoutMode = 'HORIZONTAL';
+          figmaElement.primaryAxisSizingMode = 'AUTO';
+          figmaElement.counterAxisSizingMode = 'AUTO';
+          figmaElement.primaryAxisAlignItems = 'MIN';
+          figmaElement.counterAxisAlignItems = 'MIN';
+          figmaElement.itemSpacing = 10;
+          console.log('Applied flex display style');
+        }
+        break;
+        
+      case 'none':
+        // For display:none, hide the element
+        figmaElement.visible = false;
+        console.log('Applied display:none (element hidden)');
+        break;
+        
+      default:
+        console.warn(`Unsupported display value: ${displayValue}`);
+    }
+  }
+  
   // Apply text alignment
   if (styles['text-align'] && figmaElement.type === 'TEXT') {
     const alignment = styles['text-align'];
@@ -775,8 +868,6 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
       console.error('Error applying special text decoration to span:', e);
     }
   }
-}
-
 // Function to parse color strings into RGB values and extract opacity
 function parseColor(colorString) {
   if (!colorString) return null;
@@ -859,3 +950,8 @@ function parseColor(colorString) {
   // Default to black if color can't be parsed
   return { r: 0, g: 0, b: 0 };
 }
+// End of parseColor function
+
+} // End of createFigmaElementsFromHTML function
+
+// End of file
