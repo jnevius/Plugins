@@ -205,7 +205,9 @@
     // Set some default content for easier testing
     htmlEditor.setValue(`<h1>Hello Figma</h1>
 <p>This is a paragraph of text.</p>
-<div class="box">This is a styled div</div>`);
+<div class="box">This is a styled div</div>
+<p style="opacity: 0.5;">This paragraph has inline opacity</p>
+<div class="transparent-box">This div has opacity from CSS</div>`);
 
     cssEditor.setValue(`h1 {
   color: #ff0000;
@@ -224,6 +226,15 @@ p {
   padding: 16px;
   width: 200px;
   height: 100px;
+}
+
+.transparent-box {
+  background-color: #4caf50;
+  color: white;
+  padding: 16px;
+  border-radius: 8px;
+  width: 200px;
+  opacity: 0.7;
 }`);
 
     // Get UI elements

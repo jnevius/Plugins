@@ -329,22 +329,46 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
   
   // Apply color
   if (styles.color && figmaElement.type === 'TEXT') {
-    const rgb = parseColor(styles.color);
-    if (rgb) {
+    const colorResult = parseColor(styles.color);
+    if (colorResult) {
+      // Extract opacity if present in the color
+      if (colorResult.opacity !== undefined && !styles.opacity) {
+        try {
+          figmaElement.opacity = colorResult.opacity;
+          console.log(`Applied opacity from color: ${colorResult.opacity}`);
+        } catch (e) {
+          console.error(`Error applying opacity from color: ${e.message}`);
+        }
+      }
+      
+      // Apply the color (without the opacity property)
+      const { r, g, b } = colorResult;
       figmaElement.fills = [{
         type: 'SOLID',
-        color: rgb
+        color: { r, g, b }
       }];
     }
   }
   
   // Apply background color for frames
   if (styles['background-color'] && figmaElement.type === 'FRAME') {
-    const rgb = parseColor(styles['background-color']);
-    if (rgb) {
+    const colorResult = parseColor(styles['background-color']);
+    if (colorResult) {
+      // Extract opacity if present in the color
+      if (colorResult.opacity !== undefined && !styles.opacity) {
+        try {
+          figmaElement.opacity = colorResult.opacity;
+          console.log(`Applied opacity from background-color: ${colorResult.opacity}`);
+        } catch (e) {
+          console.error(`Error applying opacity from background-color: ${e.message}`);
+        }
+      }
+      
+      // Apply the color (without the opacity property)
+      const { r, g, b } = colorResult;
       figmaElement.fills = [{
         type: 'SOLID',
-        color: rgb
+        color: { r, g, b }
       }];
     }
   }
@@ -441,14 +465,25 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
     }
   }
   
-  // FIXED: Apply opacity - moved to end and added validation
+  // Apply opacity with proper error handling
   if (styles.opacity) {
-    const opacityValue = parseFloat(styles.opacity);
-    if (!isNaN(opacityValue) && opacityValue >= 0 && opacityValue <= 1) {
+    try {
+      // Parse opacity value and ensure it's between 0 and 1
+      let opacityValue = parseFloat(styles.opacity);
+      
+      // Handle percentage values (e.g., "50%")
+      if (styles.opacity.includes('%')) {
+        opacityValue = parseFloat(styles.opacity) / 100;
+      }
+      
+      // Clamp value between 0 and 1
+      opacityValue = Math.max(0, Math.min(1, opacityValue));
+      
+      // Apply opacity to the element
       figmaElement.opacity = opacityValue;
       console.log(`Applied opacity: ${opacityValue} to element`);
-    } else {
-      console.warn(`Invalid opacity value: ${styles.opacity}. Must be between 0 and 1.`);
+    } catch (e) {
+      console.error(`Error applying opacity: ${e.message}`);
     }
   }
   
@@ -495,11 +530,16 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
   }
 }
 
-// Function to parse color strings into RGB values
+// Function to parse color strings into RGB values and extract opacity
 function parseColor(colorString) {
+  if (!colorString) return null;
+  
+  // Normalize color string
+  colorString = colorString.toLowerCase().trim();
+  
   // Handle hex colors
   if (colorString.startsWith('#')) {
-    const hex = colorString.substring(1);
+    let hex = colorString.substring(1);
     
     // Handle #RGB format
     if (hex.length === 3) {
@@ -517,6 +557,16 @@ function parseColor(colorString) {
       const b = parseInt(hex.substring(4, 6), 16) / 255;
       
       return { r, g, b };
+    }
+    
+    // Handle #RRGGBBAA format
+    if (hex.length === 8) {
+      const r = parseInt(hex.substring(0, 2), 16) / 255;
+      const g = parseInt(hex.substring(2, 4), 16) / 255;
+      const b = parseInt(hex.substring(4, 6), 16) / 255;
+      const a = parseInt(hex.substring(6, 8), 16) / 255;
+      
+      return { r, g, b, opacity: a };
     }
   }
   
@@ -536,8 +586,10 @@ function parseColor(colorString) {
     const r = parseInt(rgbaMatch[1]) / 255;
     const g = parseInt(rgbaMatch[2]) / 255;
     const b = parseInt(rgbaMatch[3]) / 255;
+    const alpha = parseFloat(rgbaMatch[4]);
     
-    return { r, g, b };
+    // Return both RGB values and opacity
+    return { r, g, b, opacity: alpha };
   }
   
   // Handle named colors (simplified)
