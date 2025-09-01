@@ -56,153 +56,160 @@ async function createFigmaElementsFromHTML(html, css) {
 
 // Function to process nested elements like <u> and <s> within paragraphs
 function processNestedElements(elements) {
-  // First, find all inline elements (spans, u, s, etc.)
-  const inlineElements = elements.filter(el => 
-    el.type === 'span' && (el.originalTag === 'u' || el.originalTag === 's' || 
-                          el.originalTag === 'strike' || el.originalTag === 'del'));
-  
-  console.log(`Found ${inlineElements.length} inline elements to process:`, 
-              inlineElements.map(el => `<${el.originalTag}>${el.content}</${el.originalTag}>`));
-  
-  // Then find their parent elements (paragraphs, headings, etc.)
-  for (const element of elements) {
-    if (element.type === 'paragraph' || element.type === 'heading') {
-      if (element.rawContent) {
-        // Check if this element contains any of our inline elements
-        for (const inline of inlineElements) {
-          // If the inline element's content is found in this element's raw content
-          if (element.rawContent.includes(inline.content)) {
-            // Add the inline element as a child of this element
-            if (!element.children) {
-              element.children = [];
-            }
-            element.children.push(inline);
-            
-            console.log(`Added ${inline.originalTag} element with content "${inline.content}" as child of ${element.type}`);
-            
-            // Mark the inline element to be removed from the main elements array
-            inline._processed = true;
-          }
-        }
-      }
-    }
+  // If spans are already nested inside paragraphs/headings, skip processing
+  const hasNestedSpans = (arr) => arr.some(el => {
+    if (el.children && el.children.some(c => c.type === 'span')) return true;
+    return el.children ? hasNestedSpans(el.children) : false;
+  });
+
+  if (hasNestedSpans(elements)) { 
+    console.log('Nested spans already present; skipping inline re-attachment');
+    return;
   }
-  
-  // Remove processed inline elements from the main array
-  let removedCount = 0;
-  for (let i = elements.length - 1; i >= 0; i--) {
-    if (elements[i]._processed) {
-      elements.splice(i, 1);
-      removedCount++;
-    }
-  }
-  
-  console.log(`Removed ${removedCount} processed inline elements from main array`);
+
+  // Legacy fallback: Keep previous behavior if needed (rare).
+  console.log('No nested spans detected; keeping content as-is');
 }
 
 // Function to parse HTML string into a simple object structure
 function parseHTML(html) {
-  // This is a simplified parser for demonstration
-  // In a real implementation, you would use a proper HTML parser
-  
-  // For now, we'll just extract some basic elements
-  const elements = [];
-  
-  // Extract headings
-  const headingRegex = /<h([1-6])([^>]*)>(.*?)<\/h\1>/gs;
+  // Stack-based minimal HTML parser to preserve nesting for div/p/h1-6/span/u/s/strike/del
+  const root = { type: 'root', children: [] };
+  const stack = [root];
+
+  // Tokenize tags and text
+  const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g;
+  let lastIndex = 0;
   let match;
-  
-  while ((match = headingRegex.exec(html)) !== null) {
-    const level = match[1];
-    const content = match[3].trim();
-    const rawContent = match[3]; // Keep the raw content for parsing nested elements
-    
-    elements.push({
-      type: 'heading',
-      level: parseInt(level),
-      content: content,
-      rawContent: rawContent,
-      attributes: parseAttributes(match[2])
-    });
+
+  function current() { return stack[stack.length - 1]; }
+
+  function pushNode(node) {
+    const parent = current();
+    parent.children = parent.children || [];
+    parent.children.push(node);
+    return node;
   }
-  
-  // Extract paragraphs
-  const paragraphRegex = /<p([^>]*)>(.*?)<\/p>/gs;
-  
-  while ((match = paragraphRegex.exec(html)) !== null) {
-    const content = match[2].trim();
-    const rawContent = match[2]; // Keep the raw content for parsing nested elements
-    
-    // Check for inline styling within paragraph content
-    const hasInlineStyles = /<span|<u>|<s>|<strike>|<del>/.test(rawContent);
-    
-    // For paragraphs with inline styles, we need to preserve the raw content
-    // but also strip tags for the main content display if it has inline styles
-    const strippedContent = hasInlineStyles ? content.replace(/<[^>]*>|<\/[^>]*>/g, '') : content;
-    
-    elements.push({
-      type: 'paragraph',
-      content: strippedContent,
-      rawContent: rawContent,
-      hasInlineStyles: hasInlineStyles,
-      attributes: parseAttributes(match[1])
-    });
-    
-    console.log(`Parsed paragraph: "${strippedContent}" with raw content: "${rawContent}"`);
-  }
-  
-  // Extract divs
-  const divRegex = /<div([^>]*)>(.*?)<\/div>/gs;
-  
-  while ((match = divRegex.exec(html)) !== null) {
-    const content = match[2].trim();
-    const rawContent = match[2]; // Keep the raw content for parsing nested elements
-    
-    elements.push({
-      type: 'div',
-      content: content,
-      rawContent: rawContent,
-      attributes: parseAttributes(match[1])
-    });
-  }
-  
-  // Extract spans and inline elements (u, s, strike, del) for styling
-  const inlineRegex = /<(span|u|s|strike|del)([^>]*)>(.*?)<\/\1>/gs;
-  
-  while ((match = inlineRegex.exec(html)) !== null) {
-    const tagName = match[1];
-    const content = match[3].trim();
-    const rawContent = match[3]; // Keep the raw content for parsing nested elements
-    
-    console.log(`Found inline element: <${tagName}>${content}</${tagName}>`);
-    
-    // Create attributes object
-    const attributes = parseAttributes(match[2]);
-    
-    // For u, s, strike, and del tags, add text-decoration style
-    if (tagName === 'u') {
-      if (!attributes.style) attributes.style = {};
-      attributes.style['text-decoration'] = 'underline';
-      console.log(`Added underline style to <u> tag with content: "${content}"`);
-    } else if (['s', 'strike', 'del'].includes(tagName)) {
-      if (!attributes.style) attributes.style = {};
-      attributes.style['text-decoration'] = 'line-through';
-      console.log(`Added line-through style to <${tagName}> tag with content: "${content}"`);
+
+  function createNodeFromTag(tagName, attrs) {
+    const attributes = parseAttributes(attrs || '');
+    switch (true) {
+      case /^h[1-6]$/i.test(tagName): {
+        const level = parseInt(tagName.substring(1), 10);
+        return { type: 'heading', level, attributes, content: '', rawContent: '', children: [] , _tag: tagName.toLowerCase() };
+      }
+      case tagName.toLowerCase() === 'p':
+        return { type: 'paragraph', attributes, content: '', rawContent: '', children: [], _tag: 'p' };
+      case tagName.toLowerCase() === 'div':
+        return { type: 'div', attributes, content: '', rawContent: '', children: [], _tag: 'div' };
+      case ['span','u','s','strike','del'].includes(tagName.toLowerCase()): {
+        const node = { type: 'span', attributes, content: '', rawContent: '', children: [], originalTag: tagName.toLowerCase(), _tag: tagName.toLowerCase() };
+        // Add decoration style on attributes for u/s/strike/del
+        if (node.originalTag === 'u') {
+          node.attributes.style = node.attributes.style || {};
+          node.attributes.style['text-decoration'] = 'underline';
+        } else if (['s','strike','del'].includes(node.originalTag)) {
+          node.attributes.style = node.attributes.style || {};
+          node.attributes.style['text-decoration'] = 'line-through';
+        }
+        node.attributes._htmlTag = node.originalTag;
+        return node;
+      }
+      default:
+        return { type: 'unknown', attributes, content: '', rawContent: '', children: [], _tag: tagName.toLowerCase() };
     }
-    
-    // Add a data attribute to track the original HTML tag
-    attributes._htmlTag = tagName;
-    
-    elements.push({
-      type: 'span',
-      content: content,
-      rawContent: rawContent,
-      attributes: attributes,
-      originalTag: tagName // Store the original tag name for reference
-    });
   }
-  
-  return elements;
+
+  function appendText(text) {
+    if (!text) return;
+    const node = current();
+    const t = text;
+    // Append text and create explicit text nodes preserving order
+    if (!node) return;
+    const textNode = { type: 'text', content: t };
+    node.children = node.children || [];
+    node.children.push(textNode);
+    // Maintain simple content/rawContent for compatibility
+    if (node.type === 'paragraph' || node.type === 'heading' || node.type === 'span' || node.type === 'div') {
+      node.content = (node.content || '') + t;
+      node.rawContent = (node.rawContent || '') + t;
+    }
+  }
+
+  while ((match = tagRegex.exec(html)) !== null) {
+    const [full, tagNameRaw, attrs] = match;
+    const isClosing = full.startsWith('</');
+    const tagName = tagNameRaw.toLowerCase();
+
+    // Text between last index and current tag
+    const textBetween = html.substring(lastIndex, match.index);
+    appendText(textBetween);
+    lastIndex = tagRegex.lastIndex;
+
+    if (!isClosing) {
+      // Opening tag
+      const node = createNodeFromTag(tagName, attrs);
+      pushNode(node);
+      // Only push non-void tags to stack
+      stack.push(node);
+    } else {
+      // Closing tag: pop until matching tag found
+      for (let i = stack.length - 1; i > 0; i--) {
+        if (stack[i]._tag === tagName) {
+          stack.pop();
+          break;
+        } else {
+          stack.pop();
+        }
+      }
+    }
+  }
+
+  // Trailing text after last tag
+  appendText(html.substring(lastIndex));
+
+  // Cleanup: remove unknown nodes but keep their children
+  function normalize(arr) {
+    const out = [];
+    for (const el of arr) {
+      // Normalize children first if present
+      if (el.type === 'unknown') {
+        if (el.children && el.children.length) {
+          out.push(...normalize(el.children));
+        }
+        continue;
+      }
+      if (el.children && el.children.length) {
+        el.children = normalize(el.children);
+      }
+      // Trim content
+      if (typeof el.content === 'string') {
+        el.content = el.content.replace(/\s+/g, ' ').trim();
+      }
+      if (typeof el.rawContent === 'string') {
+        el.rawContent = el.rawContent.trim();
+      }
+      // Drop empty paragraphs that only came from stray whitespace
+      if (el.type === 'paragraph' && !el.content && (!el.children || el.children.length === 0)) {
+        continue;
+      }
+      // Drop empty text nodes
+      if (el.type === 'text') {
+        el.content = (el.content || '').replace(/\s+/g, ' ').trim();
+        if (!el.content) continue;
+      }
+      // For headings, ensure level number
+      if (el.type === 'heading' && typeof el.level !== 'number') {
+        const m = (el._tag || '').match(/h([1-6])/);
+        if (m) el.level = parseInt(m[1], 10);
+      }
+      out.push(el);
+    }
+    return out;
+  }
+
+  const result = normalize(root.children || []);
+  return result;
 }
 
 // Function to parse HTML attributes
@@ -268,6 +275,11 @@ function applyCSS(elements, css) {
     // Initialize styles object if it doesn't exist
     if (!element.styles) {
       element.styles = {};
+    }
+    
+    // Apply CSS to nested children recursively
+    if (element.children && element.children.length > 0) {
+      applyCSS(element.children, css);
     }
     
     // Apply rules based on element type
@@ -412,53 +424,50 @@ async function createElements(parent, elements) {
       case 'heading':
       case 'paragraph':
         figmaElement = figma.createText();
-        
-        // Check if this element has nested children (like <u> or <s> tags)
-        if (element.children && element.children.length > 0) {
-          console.log(`Processing ${element.type} with ${element.children.length} nested elements`);
-          
-          // Create a rich text version with spans for each nested element
-          let richText = element.content;
-          
-          // Set the full text content first
-          figmaElement.characters = richText;
-          
-          // Ensure font is loaded before applying text decorations
-          try {
-            await figma.loadFontAsync(figmaElement.fontName || { family: 'Inter', style: 'Regular' });
-          } catch (e) {
-            console.error(`Error loading font: ${e.message}`);
-          }
-          
-          // Apply text decorations to each child's range
-          for (const child of element.children) {
-            if (child.originalTag) {
-              // Find the position of the child content in the parent content
-              const startIndex = richText.indexOf(child.content);
-              if (startIndex !== -1) {
-                const endIndex = startIndex + child.content.length;
-                
-                try {                  
-                  if (child.originalTag === 'u') {
-                    // Apply underline to just this range
-                    figmaElement.setRangeTextDecoration(startIndex, endIndex, 'UNDERLINE');
-                    console.log(`Applied UNDERLINE to range ${startIndex}-${endIndex} in ${element.type} with content "${child.content}"`);
-                  } else if (['s', 'strike', 'del'].includes(child.originalTag)) {
-                    // Apply strikethrough to just this range
-                    figmaElement.setRangeTextDecoration(startIndex, endIndex, 'STRIKETHROUGH');
-                    console.log(`Applied STRIKETHROUGH to range ${startIndex}-${endIndex} in ${element.type} with content "${child.content}"`);
-                  }
-                } catch (e) {
-                  console.error(`Error applying text decoration to range: ${e.message}`);
-                }
-              } else {
-                console.error(`Could not find "${child.content}" in parent text "${richText}"`);
-              }
+        // Build text from ordered children (text nodes and span nodes)
+        let richText = '';
+        const ranges = [];
+        const visit = (nodes) => {
+          for (const n of nodes || []) {
+            if (n.type === 'text') {
+              richText += n.content;
+            } else if (n.type === 'span') {
+              const start = richText.length;
+              if (n.children && n.children.length) visit(n.children);
+              else richText += n.content || '';
+              const end = richText.length;
+              ranges.push({ start, end, tag: n.originalTag });
+            } else if (n.children && n.children.length) {
+              visit(n.children);
             }
           }
+        };
+        if (element.children && element.children.length) {
+          visit(element.children);
+          // Fallback if no text nodes were present
+          if (!richText) richText = element.content || '';
         } else {
-          // No nested elements, just set the content directly
-          figmaElement.characters = element.content;
+          richText = element.content || '';
+        }
+
+        figmaElement.characters = richText;
+        // Ensure font is loaded before applying text decorations
+        try {
+          await figma.loadFontAsync(figmaElement.fontName || { family: 'Inter', style: 'Regular' });
+        } catch (e) {
+          console.error(`Error loading font: ${e.message}`);
+        }
+        // Apply decorations from computed ranges
+        for (const r of ranges) {
+          try {
+            if (r.tag === 'u') {
+              figmaElement.setRangeTextDecoration(r.start, r.end, 'UNDERLINE');
+            } else if (['s', 'strike', 'del'].includes(r.tag)) {
+              figmaElement.setRangeTextDecoration(r.start, r.end, 'STRIKETHROUGH');
+            }
+          } catch (e) {
+            console.error('Error applying range decoration:', e);
+          }
         }
         
         // Apply heading-specific styles
@@ -510,23 +519,47 @@ async function createElements(parent, elements) {
         
         // Check if this div should be a flex container
         if (element.styles && element.styles['display'] === 'flex') {
-          figmaElement.layoutMode = 'HORIZONTAL';
+          const dir = (element.styles['flex-direction'] || 'row').toLowerCase();
+          figmaElement.layoutMode = dir === 'column' ? 'VERTICAL' : 'HORIZONTAL';
           figmaElement.primaryAxisSizingMode = 'AUTO';
           figmaElement.counterAxisSizingMode = 'AUTO';
-          figmaElement.primaryAxisAlignItems = 'MIN';
-          figmaElement.counterAxisAlignItems = 'MIN';
-          figmaElement.itemSpacing = 10;
+          // Map alignments
+          const justify = (element.styles['justify-content'] || 'flex-start').toLowerCase();
+          const align = (element.styles['align-items'] || 'stretch').toLowerCase();
+          const mapPrimary = {
+            'flex-start': 'MIN', 'start': 'MIN', 'center': 'CENTER', 'flex-end': 'MAX', 'end': 'MAX', 'space-between': 'SPACE_BETWEEN'
+          };
+          const mapCounter = { 'flex-start': 'MIN', 'start': 'MIN', 'center': 'CENTER', 'flex-end': 'MAX', 'end': 'MAX', 'baseline': 'BASELINE' };
+          figmaElement.primaryAxisAlignItems = mapPrimary[justify] || 'MIN';
+          let counter = mapCounter[align] || 'MIN';
+          // CSS 'stretch' is not a valid enum; emulate via children sizing
+          if (align === 'stretch') {
+            counter = 'MIN';
+            try { figmaElement.setPluginData('align_items', 'stretch'); } catch (e) {}
+          }
+          figmaElement.counterAxisAlignItems = counter;
+          try { figmaElement.setPluginData('flex_direction', dir); } catch (e) {}
+          // gap
+          const gap = parseInt(element.styles['gap'] || element.styles['column-gap'] || element.styles['row-gap'] || '10');
+          if (!isNaN(gap)) figmaElement.itemSpacing = gap;
           console.log('Created div as a flex container');
         }
         
         // Add text if there's content
-        if (element.content) {
+        if (element.content && element.content.trim() !== '') {
           const text = figma.createText();
           // Font should already be loaded from the preload step
           text.characters = element.content;
           figmaElement.appendChild(text);
           text.x = 10;
           text.y = 10;
+        }
+        
+        // Process nested children if any
+        if (element.children && element.children.length > 0) {
+          console.log(`Processing ${element.children.length} nested elements in div`);
+          // Recursively create child elements
+          await createElements(figmaElement, element.children);
         }
         break;
         
@@ -539,6 +572,12 @@ async function createElements(parent, elements) {
     
     // Add to parent
     parent.appendChild(figmaElement);
+    
+    // Resize parent frame to fit content if it's a flex container
+    if (parent.layoutMode) {
+      // Auto-layout will handle sizing
+      parent.resize(parent.width, parent.height);
+    }
     
     // Position elements based on their display property and parent's layout
     if (element.styles && element.styles['display']) {
@@ -570,6 +609,21 @@ async function createElements(parent, elements) {
         figmaElement.y = 20;
       }
       figmaElement.x = 20;
+    }
+
+    // If parent is a flex container with align-items: stretch, emulate stretch by filling cross axis
+    if (parent.type === 'FRAME' && parent.layoutMode) {
+      const flexDir = parent.getPluginData && parent.getPluginData('flex_direction');
+      const alignItems = parent.getPluginData && parent.getPluginData('align_items');
+      if (alignItems === 'stretch') {
+        if (flexDir === 'row') {
+          // Fill vertical
+          if ('layoutSizingVertical' in figmaElement) figmaElement.layoutSizingVertical = 'FILL';
+        } else if (flexDir === 'column') {
+          // Fill horizontal
+          if ('layoutSizingHorizontal' in figmaElement) figmaElement.layoutSizingHorizontal = 'FILL';
+        }
+      }
     }
   }
 }
@@ -730,10 +784,11 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
           figmaElement.itemSpacing = 10;
           console.log('Applied block display style');
         } else if (figmaElement.type === 'TEXT') {
-          // For text elements, we can't directly set layout sizing
-          // But we can adjust width to simulate block behavior
-          figmaElement.resize(parent.width - 40, figmaElement.height);
-          console.log('Applied block-like sizing to text element');
+          // For text elements we don't have access to the parent here.
+          // Avoid referencing an undefined `parent`. If block sizing is
+          // required for text, it should be handled by the caller (createElements)
+          // where the parent frame is available.
+          console.log('Block sizing for TEXT skipped here (parent not available)');
         }
         break;
         
