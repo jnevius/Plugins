@@ -192,21 +192,22 @@ function parseHTML(html) {
       if (el.children && el.children.length) {
         el.children = normalize(el.children);
       }
-      // Trim content
-      if (typeof el.content === 'string') {
-        el.content = el.content.replace(/\s+/g, ' ').trim();
-      }
-      if (typeof el.rawContent === 'string') {
-        el.rawContent = el.rawContent.trim();
+      // Trim content for non-text elements only
+      if (el.type !== 'text') {
+        if (typeof el.content === 'string') {
+          el.content = el.content.replace(/\s+/g, ' ').trim();
+        }
+        if (typeof el.rawContent === 'string') {
+          el.rawContent = el.rawContent.trim();
+        }
       }
       // Drop empty paragraphs that only came from stray whitespace
       if (el.type === 'paragraph' && !el.content && (!el.children || el.children.length === 0)) {
         continue;
       }
-      // Drop empty text nodes
+      // Preserve text node whitespace; do not trim or collapse here to keep spaces around inline tags
       if (el.type === 'text') {
-        el.content = (el.content || '').replace(/\s+/g, ' ').trim();
-        if (!el.content) continue;
+        // keep as-is
       }
       // For headings, ensure level number
       if (el.type === 'heading' && typeof el.level !== 'number') {
