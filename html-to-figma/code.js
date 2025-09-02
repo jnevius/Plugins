@@ -33,7 +33,17 @@ async function createFigmaElementsFromHTML(html, css) {
   // Create a frame to contain our elements
   const frame = figma.createFrame();
   frame.name = 'HTML to Figma';
-  frame.resize(800, 600);
+  // Make the top-level frame an auto-layout container (vertical)
+  frame.layoutMode = 'VERTICAL';
+  frame.primaryAxisSizingMode = 'AUTO'; // Hug contents vertically
+  frame.counterAxisSizingMode = 'AUTO'; // Hug contents horizontally
+  frame.primaryAxisAlignItems = 'MIN';
+  frame.counterAxisAlignItems = 'MIN';
+  frame.itemSpacing = 12;
+  frame.paddingLeft = 16;
+  frame.paddingRight = 16;
+  frame.paddingTop = 16;
+  frame.paddingBottom = 16;
   
   // Parse the HTML
   const elements = parseHTML(html);
