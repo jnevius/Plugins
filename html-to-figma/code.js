@@ -697,6 +697,24 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
     }
   }
   
+  // Apply box-shadow (maps to Figma effects: DROP_SHADOW/INNER_SHADOW)
+  if (styles['box-shadow']) {
+    const value = styles['box-shadow'].trim();
+    try {
+      if (value.toLowerCase() === 'none') {
+        figmaElement.effects = [];
+      } else {
+        const parser = (typeof parseBoxShadowCSS !== 'undefined') ? parseBoxShadowCSS : (typeof globalThis !== 'undefined' ? globalThis.parseBoxShadowCSS : undefined);
+        const effects = parser ? parser(value) : [];
+        if (effects && effects.length) {
+          figmaElement.effects = effects;
+        }
+      }
+    } catch (e) {
+      console.error('Error applying box-shadow:', e);
+    }
+  }
+
   // Apply font size
   if (styles['font-size'] && figmaElement.type === 'TEXT') {
     const fontSize = parseInt(styles['font-size']);
@@ -1016,6 +1034,95 @@ function parseColor(colorString) {
   return { r: 0, g: 0, b: 0 };
 }
 // End of parseColor function
+
+// Function to parse CSS box-shadow into Figma effect objects (top-level)
+function parseBoxShadowCSS(shadowString) {
+  // Split multiple shadows by commas not inside parentheses
+  const parts = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < shadowString.length; i++) {
+    const ch = shadowString[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    else if (ch === ',' && depth === 0) {
+      parts.push(shadowString.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(shadowString.slice(start));
+
+  const effects = [];
+
+  for (let raw of parts) {
+    let str = raw.trim();
+    if (!str) continue;
+
+    let inset = false;
+    // detect inset anywhere
+    if (/\binset\b/i.test(str)) {
+      inset = true;
+      str = str.replace(/\binset\b/i, '').trim();
+    }
+
+    // Extract color (rgba(), rgb(), hex, or named)
+    let colorMatch = str.match(/rgba?\([^\)]+\)/i);
+    let colorString = null;
+    if (colorMatch) {
+      colorString = colorMatch[0];
+      str = (str.slice(0, colorMatch.index) + str.slice(colorMatch.index + colorMatch[0].length)).trim();
+    } else {
+      const hexMatch = str.match(/#[0-9a-fA-F]{3,8}\b/);
+      if (hexMatch) {
+        colorString = hexMatch[0];
+        str = (str.slice(0, hexMatch.index) + str.slice(hexMatch.index + hexMatch[0].length)).trim();
+      } else {
+        // Try last token as named color
+        const tokensTmp = str.split(/\s+/);
+        const last = tokensTmp[tokensTmp.length - 1];
+        if (last && parseColor(last)) {
+          colorString = last;
+          tokensTmp.pop();
+          str = tokensTmp.join(' ');
+        }
+      }
+    }
+
+    // Remaining string contains offsets/blur/spread
+    const tokens = str.split(/\s+/).filter(Boolean);
+    const toNumber = (v) => {
+      if (!v) return 0;
+      const m = String(v).match(/-?\d*\.?\d+/);
+      return m ? parseFloat(m[0]) : 0;
+    };
+
+    const offsetX = toNumber(tokens[0]);
+    const offsetY = toNumber(tokens[1]);
+    const blur = toNumber(tokens[2]);
+    // spread is tokens[3], but Figma API may not expose it uniformly; omit for safety
+
+    const col = parseColor(colorString || 'rgba(0,0,0,0.25)') || { r: 0, g: 0, b: 0, opacity: 0.25 };
+    const effectColor = { r: col.r, g: col.g, b: col.b, a: col.opacity !== undefined ? col.opacity : 1 };
+
+    effects.push({
+      type: inset ? 'INNER_SHADOW' : 'DROP_SHADOW',
+      visible: true,
+      color: effectColor,
+      blendMode: 'NORMAL',
+      offset: { x: offsetX, y: offsetY },
+      radius: blur
+    });
+  }
+
+  return effects;
+}
+
+// Expose helpers when running outside Figma (tests)
+try {
+  if (typeof globalThis !== 'undefined') {
+    if (typeof globalThis.parseBoxShadowCSS === 'undefined') globalThis.parseBoxShadowCSS = parseBoxShadowCSS;
+    if (typeof globalThis.parseColor === 'undefined') globalThis.parseColor = parseColor;
+  }
+} catch (e) {}
 
 } // End of createFigmaElementsFromHTML function
 
