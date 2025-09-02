@@ -9,6 +9,8 @@ A Figma plugin that allows you to create designs from HTML and CSS markup. This 
 - Converts basic HTML elements to Figma layers
 - Applies CSS styling to Figma elements
 - Simple and intuitive UI
+- Top-level frame uses vertical Auto Layout for natural stacking
+- Flexbox mapping for divs with display:flex (direction, alignment, gap)
 
 ## Supported HTML Elements
 
@@ -26,6 +28,8 @@ The plugin supports the following CSS properties:
 - `background-color`
 - `font-size`
 - `font-weight`
+- `line-height` (normal, px, %, unitless multiplier)
+- `letter-spacing` (normal, px, em/rem as percent)
 - `width` and `height` (for divs)
 - `border`
 - `border-radius`
@@ -34,6 +38,8 @@ The plugin supports the following CSS properties:
 - `text-align` (left, center, right)
 - `opacity`
 - `text-decoration` (underline, line-through)
+- `box-shadow` (maps to Figma effects)
+- `display` (block, inline, flex, none)
 
 ## Installation
 
@@ -71,6 +77,8 @@ p {
   color: #333333;
   font-size: 16px;
   opacity: 0.9;
+  line-height: 1.6;
+  letter-spacing: 0.1em; /* 10% in Figma */
 }
 
 .box {
@@ -82,13 +90,14 @@ p {
   width: 200px;
   height: 100px;
   text-align: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 ```
 
 ## Limitations
 
 - The plugin currently uses a simplified HTML and CSS parser, so complex markup may not work correctly
-- Nested elements are not fully supported yet
+- Complex selectors and cascading order are simplified; specificity is basic
 - Limited CSS properties are supported
 - The plugin does not support JavaScript or interactive elements
 

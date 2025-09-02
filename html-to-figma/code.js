@@ -750,6 +750,23 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
     }
   }
   
+  // Apply letter-spacing
+  if (styles['letter-spacing'] && figmaElement.type === 'TEXT') {
+    const ls = parseLetterSpacingCSS(styles['letter-spacing']);
+    try {
+      if (ls && ls.unit === 'NORMAL') {
+        // Figma has no explicit 'normal'; set to 0 PIXELS
+        figmaElement.letterSpacing = { unit: 'PIXELS', value: 0 };
+      } else if (ls && ls.unit === 'PIXELS') {
+        figmaElement.letterSpacing = { unit: 'PIXELS', value: ls.value };
+      } else if (ls && ls.unit === 'PERCENT') {
+        figmaElement.letterSpacing = { unit: 'PERCENT', value: ls.value };
+      }
+    } catch (e) {
+      console.error('Error applying letter-spacing:', e);
+    }
+  }
+  
   // Apply width and height for frames
   if (figmaElement.type === 'FRAME') {
     if (styles.width) {
@@ -968,6 +985,7 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
       console.error('Error applying special text decoration to span:', e);
     }
   }
+}
 // Function to parse color strings into RGB values and extract opacity
 function parseColor(colorString) {
   if (!colorString) return null;
@@ -1168,6 +1186,33 @@ try {
   }
 } catch (e) {}
 
-} // End of createFigmaElementsFromHTML function
+// Parse CSS letter-spacing into Figma-friendly units
+function parseLetterSpacingCSS(value) {
+  if (value == null) return { unit: 'PIXELS', value: 0 };
+  const v = String(value).trim().toLowerCase();
+  if (v === 'normal') return { unit: 'NORMAL' };
+  if (v === '0' || v === '0px') return { unit: 'PIXELS', value: 0 };
+  if (v.endsWith('px')) {
+    const n = parseFloat(v);
+    return isNaN(n) ? { unit: 'PIXELS', value: 0 } : { unit: 'PIXELS', value: n };
+  }
+  // em/rem treated as multiplier relative to font size -> map to percent
+  if (v.endsWith('em') || v.endsWith('rem')) {
+    const n = parseFloat(v);
+    return isNaN(n) ? { unit: 'PIXELS', value: 0 } : { unit: 'PERCENT', value: n * 100 };
+  }
+  // Unitless number treat as px if numeric (CSS typically requires length; 0 allowed)
+  const num = parseFloat(v);
+  if (!isNaN(num)) {
+    return { unit: 'PIXELS', value: num };
+  }
+  return { unit: 'PIXELS', value: 0 };
+}
+
+try {
+  if (typeof globalThis !== 'undefined') {
+    if (typeof globalThis.parseLetterSpacingCSS === 'undefined') globalThis.parseLetterSpacingCSS = parseLetterSpacingCSS;
+  }
+} catch (e) {}
 
 // End of file
