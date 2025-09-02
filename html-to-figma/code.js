@@ -724,6 +724,22 @@ async function applyStylesToFigmaElement(figmaElement, styles) {
     }
   }
   
+  // Apply line-height
+  if (styles['line-height'] && figmaElement.type === 'TEXT') {
+    const lh = parseLineHeightCSS(styles['line-height']);
+    try {
+      if (lh && lh.unit === 'AUTO') {
+        figmaElement.lineHeight = { unit: 'AUTO' };
+      } else if (lh && lh.unit === 'PIXELS' && typeof lh.value === 'number') {
+        figmaElement.lineHeight = { unit: 'PIXELS', value: lh.value };
+      } else if (lh && lh.unit === 'PERCENT' && typeof lh.value === 'number') {
+        figmaElement.lineHeight = { unit: 'PERCENT', value: lh.value };
+      }
+    } catch (e) {
+      console.error('Error applying line-height:', e);
+    }
+  }
+  
   // Apply font weight
   if (styles['font-weight'] && figmaElement.type === 'TEXT') {
     const fontWeight = styles['font-weight'];
@@ -1122,6 +1138,33 @@ try {
   if (typeof globalThis !== 'undefined') {
     if (typeof globalThis.parseBoxShadowCSS === 'undefined') globalThis.parseBoxShadowCSS = parseBoxShadowCSS;
     if (typeof globalThis.parseColor === 'undefined') globalThis.parseColor = parseColor;
+  }
+} catch (e) {}
+
+// Parse CSS line-height into Figma-friendly units
+function parseLineHeightCSS(value) {
+  if (!value) return { unit: 'AUTO' };
+  const v = String(value).trim().toLowerCase();
+  if (v === 'normal') return { unit: 'AUTO' };
+  if (v.endsWith('px')) {
+    const n = parseFloat(v);
+    return isNaN(n) ? { unit: 'AUTO' } : { unit: 'PIXELS', value: n };
+  }
+  if (v.endsWith('%')) {
+    const n = parseFloat(v);
+    return isNaN(n) ? { unit: 'AUTO' } : { unit: 'PERCENT', value: n };
+  }
+  // Unitless number or em/rem -> treat as multiplier
+  const num = parseFloat(v.replace(/em|rem/, ''));
+  if (!isNaN(num)) {
+    return { unit: 'PERCENT', value: num * 100 };
+  }
+  return { unit: 'AUTO' };
+}
+
+try {
+  if (typeof globalThis !== 'undefined') {
+    if (typeof globalThis.parseLineHeightCSS === 'undefined') globalThis.parseLineHeightCSS = parseLineHeightCSS;
   }
 } catch (e) {}
 
