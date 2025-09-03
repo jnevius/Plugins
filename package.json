@@ -1,0 +1,21 @@
+{
+  "name": "html-to-figma-plugin",
+  "version": "1.0.0",
+  "description": "A Figma plugin that converts HTML and CSS markup into Figma design elements",
+  "main": "code.js",
+  "scripts": {
+    "test": "node parseHTML.test.js && node styleApply.test.js && node whitespace.test.js && node lineHeight.test.js && node boxShadow.test.js"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.90.0"
+  },
+  "keywords": [
+    "figma",
+    "plugin",
+    "html",
+    "css",
+    "design"
+  ],
+  "author": "",
+  "license": "MIT"
+}
